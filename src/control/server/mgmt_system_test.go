@@ -18,6 +18,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/peer"
+	"google.golang.org/protobuf/testing/protocmp"
 
 	"github.com/daos-stack/daos/src/control/build"
 	"github.com/daos-stack/daos/src/control/common"
@@ -448,7 +449,10 @@ func checkMembers(t *testing.T, exp system.Members, ms *system.Membership) {
 			t.Fatalf("unexpected member state for rank %d (-want, +got)\n%s\n", em.Rank, diff)
 		}
 
-		cmpOpts := []cmp.Option{cmpopts.IgnoreUnexported(system.Member{})}
+		cmpOpts := []cmp.Option{
+			cmpopts.IgnoreUnexported(system.Member{}),
+			cmpopts.EquateApproxTime(time.Second),
+		}
 		if diff := cmp.Diff(em, am, cmpOpts...); diff != "" {
 			t.Fatalf("unexpected members (-want, +got)\n%s\n", diff)
 		}
@@ -829,7 +833,10 @@ func TestServer_MgmtSvc_rpcFanout(t *testing.T) {
 				return
 			}
 
-			cmpOpts := []cmp.Option{cmpopts.IgnoreUnexported(system.MemberResult{}, system.Member{})}
+			cmpOpts := []cmp.Option{
+				cmpopts.IgnoreUnexported(system.MemberResult{}, system.Member{}),
+				cmpopts.EquateApproxTime(time.Second),
+			}
 			if diff := cmp.Diff(tc.expResults, gotResp.Results, cmpOpts...); diff != "" {
 				t.Logf("unexpected results (-want, +got)\n%s\n", diff) // prints on err
 			}
@@ -1019,11 +1026,12 @@ func TestServer_MgmtSvc_SystemQuery(t *testing.T) {
 				return
 			}
 
-			cmpOpts := common.DefaultCmpOpts()
+			cmpOpts := append(common.DefaultCmpOpts(),
+				protocmp.IgnoreFields(&mgmtpb.SystemMember{}, "last_update"),
+			)
 			if diff := cmp.Diff(tc.expMembers, gotResp.Members, cmpOpts...); diff != "" {
 				t.Logf("unexpected results (-want, +got)\n%s\n", diff) // prints on err
 			}
-			common.AssertEqual(t, tc.expMembers, gotResp.Members, name)
 			common.AssertEqual(t, tc.expAbsentHosts, gotResp.Absenthosts, "absent hosts")
 			common.AssertEqual(t, tc.expAbsentRanks, gotResp.Absentranks, "absent ranks")
 		})
@@ -1188,7 +1196,9 @@ func TestServer_MgmtSvc_SystemStart(t *testing.T) {
 				return
 			}
 
-			cmpOpts := common.DefaultCmpOpts()
+			cmpOpts := append(common.DefaultCmpOpts(),
+				protocmp.IgnoreFields(&mgmtpb.SystemMember{}, "last_update"),
+			)
 			if diff := cmp.Diff(tc.expResults, gotResp.Results, cmpOpts...); diff != "" {
 				t.Logf("unexpected results (-want, +got)\n%s\n", diff) // prints on err
 			}
@@ -1379,7 +1389,9 @@ func TestServer_MgmtSvc_SystemStop(t *testing.T) {
 				return
 			}
 
-			cmpOpts := common.DefaultCmpOpts()
+			cmpOpts := append(common.DefaultCmpOpts(),
+				protocmp.IgnoreFields(&mgmtpb.SystemMember{}, "last_update"),
+			)
 			if diff := cmp.Diff(tc.expResults, gotResp.Results, cmpOpts...); diff != "" {
 				t.Logf("unexpected results (-want, +got)\n%s\n", diff) // prints on err
 			}
@@ -1507,7 +1519,9 @@ func TestServer_MgmtSvc_SystemErase(t *testing.T) {
 				return
 			}
 
-			cmpOpts := common.DefaultCmpOpts()
+			cmpOpts := append(common.DefaultCmpOpts(),
+				protocmp.IgnoreFields(&mgmtpb.SystemMember{}, "last_update"),
+			)
 			if diff := cmp.Diff(tc.expResults, gotResp.Results, cmpOpts...); diff != "" {
 				t.Logf("unexpected results (-want, +got)\n%s\n", diff) // prints on err
 			}
