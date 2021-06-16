@@ -409,6 +409,10 @@ degrade_multi_conts_agg(void **state)
 						      fail_shards[i]);
 	rebuild_pools_ranks(&args[0], 1, fail_ranks, shards_nr, false);
 
+	daos_debug_set_params(args[0]->group, -1, DMG_KEY_FAIL_LOC,
+			      DAOS_FAIL_AGG_BOUNDRY_MOVED | DAOS_FAIL_ONCE,
+			      0, NULL);
+
 	for (i = 0; i < CONT_PER_POOL; i++) {
 		if ((i % 3) == 0)
 			degrade_ec_verify(args[i], oids[i],
@@ -419,6 +423,8 @@ degrade_multi_conts_agg(void **state)
 			degrade_ec_verify(args[i], oids[i],
 					  PARTIAL_FULL_UPDATE);
 	}
+
+	daos_debug_set_params(args[0]->group, -1, DMG_KEY_FAIL_LOC, 0, 0, NULL);
 
 out:
 	for (i = CONT_PER_POOL - 1; i >= 0; i--)

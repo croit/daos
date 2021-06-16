@@ -699,6 +699,11 @@ enum {
  * fetch.
  */
 #define DAOS_FAIL_SHARD_FETCH		(DAOS_FAIL_UNIT_TEST_GROUP_LOC | 0x27)
+/**
+ * This fault simulates the EC aggregation boundary (agg_eph_boundry) moved
+ * ahead, in that case nee to redo the degraded fetch.
+ */
+#define DAOS_FAIL_AGG_BOUNDRY_MOVED	(DAOS_FAIL_UNIT_TEST_GROUP_LOC | 0x28)
 
 #define DAOS_DTX_COMMIT_SYNC		(DAOS_FAIL_UNIT_TEST_GROUP_LOC | 0x30)
 #define DAOS_DTX_LEADER_ERROR		(DAOS_FAIL_UNIT_TEST_GROUP_LOC | 0x31)

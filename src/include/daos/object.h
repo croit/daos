@@ -619,22 +619,6 @@ daos_recx_ep_add(struct daos_recx_ep_list *list, struct daos_recx_ep *recx)
 }
 
 static inline void
-daos_recx_ep_list_set_ep_valid(struct daos_recx_ep_list *lists, unsigned int nr)
-{
-	unsigned int i;
-
-	for (i = 0; i < nr; i++)
-		lists[i].re_ep_valid = 1;
-}
-
-static inline bool
-daos_recx_ep_list_ep_valid(struct daos_recx_ep_list *list)
-{
-	return (list->re_ep_valid == 1);
-}
-
-/** Query the highest and lowest recx in the recx_ep_list */
-static inline void
 daos_recx_ep_list_hilo(struct daos_recx_ep_list *list, daos_recx_t *hi_ptr,
 		       daos_recx_t *lo_ptr)
 {

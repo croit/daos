@@ -1866,7 +1866,7 @@ obj_ec_recov_add(struct obj_reasb_req *reasb_req,
 				return rc;
 		}
 	}
-	daos_recx_ep_list_set_ep_valid(recov_lists, nr);
+	daos_recx_ep_list_set(recov_lists, nr, 0);
 	return 0;
 }
 

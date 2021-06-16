@@ -1962,6 +1962,11 @@ agg_process_stripe(struct ec_agg_param *agg_param, struct ec_agg_entry *entry)
 	 * parity ext epoch if exist.
 	 */
 	iter_param.ip_hdl		= DAOS_HDL_INVAL;
+	/* set epr_lo as zero to pass-through possibly existed snapshot
+	 * between agg_param->ap_epr.epr_lo and .epr_hi.
+	 */
+	iter_param.ip_epr.epr_lo	= 0;
+	iter_param.ip_epr.epr_hi	= agg_param->ap_epr.epr_hi;
 	iter_param.ip_ih		= entry->ae_thdl;
 	iter_param.ip_flags		= VOS_IT_RECX_VISIBLE |
 					  VOS_IT_SKIP_REMOVED;

@@ -1238,6 +1238,43 @@ daos_iod_recx_dup(daos_iod_t *iods, uint32_t iod_nr, daos_iod_t **iods_dup_ptr)
 	return 0;
 }
 
+static bool
+obj_fetch_from_snapshot(struct obj_rw_in *orw, struct obj_io_context *ioc)
+{
+	struct ds_cont_child	*cont;
+	int			 i;
+
+	cont = ioc->ioc_coc;
+	for (i = 0; i < cont->sc_snapshots_nr; i++) {
+		if (orw->orw_epoch == cont->sc_snapshots[i])
+			return true;
+	}
+
+	return false;
+}
+
+static bool
+obj_ec_recov_need_try_again(struct obj_rw_in *orw, struct obj_io_context *ioc)
+{
+	D_ASSERT(orw->orw_flags & ORF_EC_RECOV);
+
+	if (DAOS_FAIL_CHECK(DAOS_FAIL_AGG_BOUNDRY_MOVED))
+		return true;
+
+	/* if recovery from snapshot, need not try again */
+	if (obj_fetch_from_snapshot(orw, ioc))
+		return false;
+
+	/* agg_eph_boundry advanced, possibly cause epoch of EC data recovery
+	 * cannot get corresponding parity/data exts, need to retry the degraded
+	 * fetch from beginning.
+	 */
+	if (orw->orw_epoch < ioc->ioc_coc->sc_ec_agg_eph_boundry)
+		return true;
+
+	return false;
+}
+
 static int
 obj_local_rw_internal(crt_rpc_t *rpc, struct obj_io_context *ioc,
 		      daos_iod_t *split_iods, struct dcs_iod_csums *split_csums,
@@ -1342,6 +1379,7 @@ obj_local_rw_internal(crt_rpc_t *rpc, struct obj_io_context *ioc,
 		uint64_t			 cond_flags;
 		uint32_t			 fetch_flags = 0;
 		bool				 ec_deg_fetch;
+		bool				 ec_recov;
 		struct daos_recx_ep_list	*shadows = NULL;
 
 		cond_flags = orw->orw_api_flags;
@@ -1355,6 +1393,20 @@ obj_local_rw_internal(crt_rpc_t *rpc, struct obj_io_context *ioc,
 		}
 
 		ec_deg_fetch = orw->orw_flags & ORF_EC_DEGRADED;
+		ec_recov = orw->orw_flags & ORF_EC_RECOV;
+		D_ASSERTF(ec_recov == false || ec_deg_fetch == false,
+			  "ec_recov %d, ec_deg_fetch %d.\n",
+			  ec_recov, ec_deg_fetch);
+		if (unlikely(ec_recov &&
+			     obj_ec_recov_need_try_again(orw, ioc))) {
+			rc = -DER_FETCH_AGAIN;
+			D_DEBUG(DB_IO, DF_UOID" "DF_X64"<"DF_X64
+				" ec_recov needs redo, "DF_RC".\n",
+				DP_UOID(orw->orw_oid), orw->orw_epoch,
+				ioc->ioc_coc->sc_ec_agg_eph_boundry,
+				DP_RC(rc));
+			goto out;
+		}
 		if (ec_deg_fetch && !spec_fetch) {
 			if (orwo->orw_rels.ca_arrays != NULL) {
 				/* Re-entry case */
@@ -1431,8 +1483,12 @@ obj_local_rw_internal(crt_rpc_t *rpc, struct obj_io_context *ioc,
 			goto out;
 		}
 		if (recov_lists != NULL) {
-			daos_recx_ep_list_set_ep_valid(recov_lists,
-						       orw->orw_nr);
+			daos_epoch_t	eph_boundry;
+
+			eph_boundry = obj_fetch_from_snapshot(orw, ioc) ?
+				      0 : ioc->ioc_coc->sc_ec_agg_eph_boundry;
+			daos_recx_ep_list_set(recov_lists, orw->orw_nr,
+					      eph_boundry);
 			orwo->orw_rels.ca_arrays = recov_lists;
 			orwo->orw_rels.ca_count = orw->orw_nr;
 		}

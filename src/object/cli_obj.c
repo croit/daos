@@ -3713,6 +3713,16 @@ obj_comp_cb(tse_task_t *task, void *data)
 		if (!obj_auxi->spec_shard && !obj_auxi->spec_group &&
 		    task->dt_result == -DER_INPROGRESS)
 			obj_auxi->to_leader = 1;
+	} else if (obj_auxi->ec_wait_recov &&
+		   task->dt_result == -DER_FETCH_AGAIN) {
+		obj_auxi->new_shard_tasks = 1;
+		obj_auxi->io_retry = 1;
+		pm_stale = 1;
+		obj_auxi->ec_wait_recov = 0;
+		obj_auxi->ec_in_recov = 0;
+		obj_auxi->reasb_req.orr_recov = 0;
+		D_DEBUG(DB_IO, DF_OID" EC fetch again.\n",
+			DP_OID(obj->cob_md.omd_id));
 	}
 
 	if (!obj_auxi->io_retry && task->dt_result == 0 &&

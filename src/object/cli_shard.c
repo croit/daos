@@ -1130,10 +1130,12 @@ dc_obj_shard_rw(struct dc_obj_shard *shard, enum obj_rpc_opc opc,
 	rw_args.shard_args = args;
 	/* remember the sgl to copyout the data inline for fetch */
 	rw_args.rwaa_sgls = (opc == DAOS_OBJ_RPC_FETCH) ? sgls : NULL;
-	if (args->reasb_req && args->reasb_req->orr_recov)
+	if (args->reasb_req && args->reasb_req->orr_recov) {
 		rw_args.maps = NULL;
-	else
+		orw->orw_flags |= ORF_EC_RECOV;
+	} else {
 		rw_args.maps = args->api_args->ioms;
+	}
 	if (opc == DAOS_OBJ_RPC_FETCH) {
 		if (args->iod_csums != NULL) {
 			orw->orw_flags |= (ORF_CREATE_MAP |

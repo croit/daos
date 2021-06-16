@@ -822,6 +822,37 @@ obj_dtx_need_refresh(struct dtx_handle *dth, int rc)
 	return rc == -DER_INPROGRESS && dth->dth_share_tbd_count > 0;
 }
 
+static inline void
+daos_recx_ep_list_set(struct daos_recx_ep_list *lists, unsigned int nr,
+		      daos_epoch_t eph_boundry)
+{
+	struct daos_recx_ep_list	*list;
+	struct daos_recx_ep		*recx_ep;
+	unsigned int			 i, j;
+
+	for (i = 0; i < nr; i++) {
+		list = &lists[i];
+		list->re_ep_valid = 1;
+		if (eph_boundry == 0)
+			continue;
+		for (j = 0; j < list->re_nr; j++) {
+			recx_ep = &list->re_items[j];
+			/* take the max as the to-be-recovered epoch, for the
+			 * case that VOS aggregation merge adjacent exts on
+			 * different nodes asynchronously.
+			 */
+			recx_ep->re_ep = max(recx_ep->re_ep, eph_boundry);
+		}
+	}
+}
+
+static inline bool
+daos_recx_ep_list_ep_valid(struct daos_recx_ep_list *list)
+{
+	return (list->re_ep_valid == 1);
+}
+
+/** Query the highest and lowest recx in the recx_ep_list */
 int  obj_class_init(void);
 void obj_class_fini(void);
 int  obj_utils_init(void);
