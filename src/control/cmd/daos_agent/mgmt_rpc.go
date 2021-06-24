@@ -8,7 +8,7 @@ package main
 
 import (
 	"net"
-	"sync"
+	"strings"
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/context"
@@ -27,14 +27,14 @@ import (
 // Management Service proxy, handling dRPCs sent by libdaos by forwarding them
 // to MS.
 type mgmtModule struct {
-	log        logging.Logger
-	sys        string
-	ctlInvoker control.Invoker
-	aiCache    *attachInfoCache
-	numaAware  bool
-	netCtx     context.Context
-	mutex      sync.Mutex
-	monitor    *procMon
+	log         logging.Logger
+	sys         string
+	ctlInvoker  control.Invoker
+	aiCache     *attachInfoCache
+	fabricCache *localFabricCache
+	numaAware   bool
+	netCtx      context.Context
+	monitor     *procMon
 }
 
 func (mod *mgmtModule) HandleCall(session *drpc.Session, method drpc.Method, req []byte) ([]byte, error) {
@@ -69,8 +69,6 @@ func (mod *mgmtModule) HandleCall(session *drpc.Session, method drpc.Method, req
 		// call the disconnect handler and return success.
 		mod.handleNotifyExit(ctx, cred.Pid)
 		return nil, nil
-	default:
-		return nil, drpc.UnknownMethodFailure()
 	}
 
 	return nil, drpc.UnknownMethodFailure()
@@ -121,64 +119,96 @@ func (mod *mgmtModule) handleGetAttachInfo(ctx context.Context, reqb []byte, pid
 		}
 	}
 
-	// synchronize access to mod.aiCache.* resources used below
-	mod.mutex.Lock()
-	defer mod.mutex.Unlock()
-
-	if mod.aiCache.isCached() {
-		if !mod.numaAware {
-			numaNode = mod.aiCache.defaultNumaNode
-		}
-		return mod.aiCache.getResponse(numaNode)
+	resp, err := mod.getAttachInfo(ctx, numaNode, pbReq.Sys)
+	if err != nil {
+		return nil, err
 	}
 
+	mod.log.Debugf("GetAttachInfoResp: %+v", resp)
+
+	return proto.Marshal(resp)
+}
+
+func (mod *mgmtModule) getAttachInfo(ctx context.Context, numaNode int, sys string) (*mgmtpb.GetAttachInfoResp, error) {
+	var resp *mgmtpb.GetAttachInfoResp
+	var err error
+	if mod.aiCache.IsEnabled() {
+		resp, err = mod.getAttachInfoCached(ctx, numaNode, sys)
+	} else {
+		resp, err = mod.getAttachInfoRemote(ctx, numaNode, sys)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	fabricIF, err := mod.getFabricInterface(ctx, numaNode, resp.NetDevClass)
+	if err != nil {
+		return nil, err
+	}
+
+	resp.Interface = fabricIF.Name
+	resp.Domain = fabricIF.Name
+	if strings.HasPrefix(resp.Provider, verbsProvider) {
+		resp.Domain = fabricIF.Alias
+		mod.log.Debugf("OFI_DOMAIN for %s has been detected as: %s", resp.Interface, resp.Domain)
+	}
+
+	return resp, nil
+}
+
+func (mod *mgmtModule) getAttachInfoCached(ctx context.Context, numaNode int, sys string) (*mgmtpb.GetAttachInfoResp, error) {
+	mod.aiCache.Lock()
+	defer mod.aiCache.Unlock()
+
+	if mod.aiCache.IsCached() {
+		return mod.aiCache.AttachInfo, nil
+	}
+
+	resp, err := mod.getAttachInfoRemote(ctx, numaNode, sys)
+	if err != nil {
+		return nil, err
+	}
+
+	mod.aiCache.Cache(ctx, resp)
+	return resp, nil
+}
+
+func (mod *mgmtModule) getAttachInfoRemote(ctx context.Context, numaNode int, sys string) (*mgmtpb.GetAttachInfoResp, error) {
 	// Ask the MS for _all_ info, regardless of pbReq.AllRanks, so that the
 	// cache can serve future "pbReq.AllRanks == true" requests.
 	req := new(control.GetAttachInfoReq)
-	req.SetSystem(pbReq.GetSys())
+	req.SetSystem(sys)
 	req.AllRanks = true
 	resp, err := control.GetAttachInfo(ctx, mod.ctlInvoker, req)
 	if err != nil {
-		return nil, errors.Wrapf(err, "GetAttachInfo %+v", pbReq)
+		return nil, errors.Wrapf(err, "GetAttachInfo %+v", req)
 	}
 
 	if resp.Provider == "" {
 		return nil, errors.New("GetAttachInfo response contained no provider")
 	}
 
-	// Scan the local fabric to determine what devices are available that match our provider
-	scanResults, err := netdetect.ScanFabric(mod.netCtx, resp.Provider)
-	if err != nil {
-		return nil, err
-	}
-
-	mod.log.Debugf("GetAttachInfo resp from MS: %+v", resp)
-
 	pbResp := new(mgmtpb.GetAttachInfoResp)
 	if err := convert.Types(resp, pbResp); err != nil {
 		return nil, errors.Wrap(err, "Failed to convert GetAttachInfo response")
 	}
 
-	err = mod.aiCache.initResponseCache(mod.netCtx, pbResp, scanResults)
+	return pbResp, nil
+}
+
+func (mod *mgmtModule) getFabricInterface(ctx context.Context, numaNode int, netDevClass uint32) (*fabricInterface, error) {
+	if mod.fabricCache.IsCached() {
+		return mod.fabricCache.GetDevice(numaNode, netDevClass)
+	}
+
+	result, err := netdetect.ScanFabric(ctx, "")
 	if err != nil {
 		return nil, err
 	}
+	mod.fabricCache.Cache(ctx, result)
 
-	if !mod.numaAware {
-		numaNode = mod.aiCache.defaultNumaNode
-	}
-
-	cacheResp, err := mod.aiCache.getResponse(numaNode)
-	if err != nil {
-		return nil, err
-	}
-
-	// If pbReq.AllRanks == false, we shouldn't return the rank URIs.
-	// Implementing that may require changing the cache to either hold
-	// unmarshalled responses (more computation work for daos_agent) or
-	// two variants of marshalled responses.
-
-	return cacheResp, err
+	return mod.fabricCache.GetDevice(numaNode, netDevClass)
 }
 
 func (mod *mgmtModule) handleNotifyPoolConnect(ctx context.Context, reqb []byte, pid int32) error {
