@@ -102,6 +102,9 @@ pool_hop_free(struct d_ulink *hlink)
 	D_ASSERT(pool->vp_opened == 0);
 	D_ASSERT(!gc_have_pool(pool));
 
+	if (daos_handle_is_valid(pool->vp_dtx_committed_hdl))
+		dbtree_destroy(pool->vp_dtx_committed_hdl, NULL);
+
 	if (pool->vp_io_ctxt != NULL) {
 		rc = bio_ioctxt_close(pool->vp_io_ctxt,
 				      pool->vp_pool_df->pd_nvme_sz == 0);
@@ -138,6 +141,8 @@ static int
 pool_alloc(uuid_t uuid, struct vos_pool **pool_p)
 {
 	struct vos_pool		*pool;
+	struct umem_attr	 uma;
+	int			 rc;
 
 	D_ALLOC_PTR(pool);
 	if (pool == NULL)
@@ -148,8 +153,25 @@ pool_alloc(uuid_t uuid, struct vos_pool **pool_p)
 	D_INIT_LIST_HEAD(&pool->vp_gc_cont);
 	uuid_copy(pool->vp_id, uuid);
 
-	*pool_p = pool;
-	return 0;
+	pool->vp_dtx_committed_hdl = DAOS_HDL_INVAL;
+	D_INIT_LIST_HEAD(&pool->vp_dtx_committed_list);
+	pool->vp_dtx_committed_count = 0;
+
+	memset(&uma, 0, sizeof(uma));
+	uma.uma_id = UMEM_CLASS_VMEM;
+
+	rc = dbtree_create_inplace_ex(VOS_BTR_DTX_CMT_TABLE, 0,
+				      DTX_BTREE_ORDER, &uma,
+				      &pool->vp_dtx_committed_btr,
+				      DAOS_HDL_INVAL, pool,
+				      &pool->vp_dtx_committed_hdl);
+	if (rc != 0)
+		D_ERROR("Failed to create DTX committed table: rc = "DF_RC"\n",
+			DP_RC(rc));
+	else
+		*pool_p = pool;
+
+	return rc;
 }
 
 static int
