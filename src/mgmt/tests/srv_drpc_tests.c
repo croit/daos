@@ -1120,7 +1120,7 @@ test_drpc_pool_get_prop_str_success(void **state)
 	assert_non_null(ds_mgmt_pool_get_prop_out);
 	ds_mgmt_pool_get_prop_out->dpp_entries[0].dpe_type = prop_number;
 	D_STRNDUP(ds_mgmt_pool_get_prop_out->dpp_entries[0].dpe_str,
-		  prop_val, DAOS_PROP_LABEL_MAX_LEN);
+		  prop_val, 4);
 	assert_non_null(ds_mgmt_pool_get_prop_out->dpp_entries[0].dpe_str);
 
 	req.uuid = TEST_UUID;
