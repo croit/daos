@@ -131,7 +131,7 @@ new_access_prop(struct daos_acl *acl, const char *owner, const char *group)
 		return NULL;
 
 	prop = daos_prop_alloc(num_entries);
-	entry = &(prop->dpp_entries[0]);
+	entry = &prop->dpp_entries[0];
 
 	if (acl != NULL) {
 		entry->dpe_type = DAOS_PROP_PO_ACL;
@@ -1478,7 +1478,6 @@ test_drpc_pool_create_invalid_acl(void **state)
 	size_t			num_acl = 2;
 	size_t			i;
 	char			**bad_acl;
-	const char		*ace = "A::myuser@:rw"; /* to be duplicated */
 
 	pc_req.uuid = TEST_UUID;
 
@@ -1486,7 +1485,7 @@ test_drpc_pool_create_invalid_acl(void **state)
 	D_ALLOC_ARRAY(bad_acl, num_acl);
 	assert_non_null(bad_acl);
 	for (i = 0; i < num_acl; i++) {
-		D_STRNDUP(bad_acl[i], ace, DAOS_ACL_MAX_ACE_STR_LEN);
+		D_STRNDUP_S(bad_acl[i], "A::myuser@:rw");
 		assert_non_null(bad_acl[i]);
 	}
 
@@ -1500,13 +1499,11 @@ test_drpc_pool_create_invalid_acl(void **state)
 	expect_create_resp_with_error(&resp, -DER_INVAL);
 
 	/* clean up */
-	for (i = 0; i < num_acl; i++) {
+	for (i = 0; i < num_acl; i++)
 		D_FREE(bad_acl[i]);
-	}
 	D_FREE(bad_acl);
 	D_FREE(call.body.data);
 	D_FREE(resp.body.data);
-
 }
 
 /*
@@ -2039,7 +2036,6 @@ test_drpc_ping_rank_success(void **state)
 
 	D_FREE(call.body.data);
 	D_FREE(resp.body.data);
-
 }
 
 /*
@@ -2280,7 +2276,6 @@ test_drpc_cont_set_owner_success(void **state)
 
 #define POOL_EVICT_TEST(x)	cmocka_unit_test_setup(x, \
 						drpc_evict_setup)
-
 
 #define PING_RANK_TEST(x)	cmocka_unit_test(x)
 
