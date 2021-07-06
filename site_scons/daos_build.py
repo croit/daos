@@ -2,7 +2,6 @@
 from SCons.Subst import Literal
 from SCons.Script import GetOption
 from env_modules import load_mpi
-from distutils.spawn import find_executable
 import os
 
 # pylint: disable=too-few-public-methods
@@ -28,7 +27,7 @@ def add_rpaths(env, install_off, set_cgo_ld, is_bin):
         if rpath.startswith('/usr'):
             env.AppendUnique(RPATH=[rpath])
             continue
-        elif install_off is None:
+        if install_off is None:
             env.AppendUnique(RPATH=[os.path.join(prefix, rpath)])
             continue
         relpath = os.path.relpath(rpath, prefix)
@@ -80,7 +79,7 @@ def install(env, subdir, files):
 
 def load_mpi_path(env):
     """Load location of mpicc into path if MPI_PKG is set"""
-    mpicc = find_executable("mpicc")
+    mpicc = env.WhereIs('mpicc')
     if mpicc:
         env.PrependENVPath("PATH", os.path.dirname(mpicc))
 
@@ -105,7 +104,7 @@ def clear_icc_env(env):
 
 def _find_mpicc(env):
     """find mpicc"""
-    mpicc = find_executable("mpicc")
+    mpicc = env.WhereIs('mpicc')
     if mpicc:
         env.Replace(CC="mpicc")
         env.Replace(LINK="mpicc")
