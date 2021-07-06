@@ -1,6 +1,7 @@
 """Common DAOS build functions"""
 from SCons.Subst import Literal
 from SCons.Script import GetOption
+from SCons.Script import WhereIs
 from env_modules import load_mpi
 import os
 
@@ -79,7 +80,7 @@ def install(env, subdir, files):
 
 def load_mpi_path(env):
     """Load location of mpicc into path if MPI_PKG is set"""
-    mpicc = env.WhereIs('mpicc')
+    mpicc = WhereIs('mpicc')
     if mpicc:
         env.PrependENVPath("PATH", os.path.dirname(mpicc))
 
@@ -104,7 +105,7 @@ def clear_icc_env(env):
 
 def _find_mpicc(env):
     """find mpicc"""
-    mpicc = env.WhereIs('mpicc')
+    mpicc = WhereIs('mpicc')
     if mpicc:
         env.Replace(CC="mpicc")
         env.Replace(LINK="mpicc")
